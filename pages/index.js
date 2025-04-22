@@ -36,6 +36,119 @@ export default function Home() {
   const [firstNode, setFirstNode] = useState(1);
   const [secondNode, setSecondNode] = useState(1);
   const [inputString, setInputString] = useState('');
+  const [dfaSpecification, setDfaSpecification] = useState('');
+
+  // Parse DFA specification and build the graph
+  const parseDfaSpecification = () => {
+    try {
+      // Extract the DFA specification from the text
+      const specMatch = dfaSpecification.match(/SPEC_DFA\s*=\s*\{([\s\S]*)\}/);
+      if (!specMatch) throw new Error("Invalid DFA specification format");
+      
+      const specText = specMatch[0];
+      
+      // Parse alphabet
+      const alphabetMatch = specText.match(/'alphabet':\s*\{([^}]*)\}/);
+      if (!alphabetMatch) throw new Error("Could not find alphabet in specification");
+      
+      // Parse states
+      const statesMatch = specText.match(/'states':\s*\{([^}]*)\}/);
+      if (!statesMatch) throw new Error("Could not find states in specification");
+      
+      // Parse initial state
+      const initialStateMatch = specText.match(/'initial_state':\s*'([^']*)'/);
+      if (!initialStateMatch) throw new Error("Could not find initial state in specification");
+      const initialState = initialStateMatch[1];
+      
+      // Parse accepting states
+      const acceptingStatesMatch = specText.match(/'accepting_states':\s*\{([^}]*)\}/);
+      if (!acceptingStatesMatch) throw new Error("Could not find accepting states in specification");
+      
+      const acceptingStates = acceptingStatesMatch[1].split(',').map(s => {
+        const match = s.match(/'([^']*)'/);
+        return match ? match[1] : null;
+      }).filter(s => s !== null);
+      
+      // Parse transitions
+      const transitionsText = specText.substring(specText.indexOf("'transitions'"));
+      const transitionRegex = /\('([^']*)',\s*'([^']*)'\):\s*'([^']*)'/g;
+      
+      const transitions = [];
+      let transitionMatch;
+      while ((transitionMatch = transitionRegex.exec(transitionsText)) !== null) {
+        transitions.push({
+          from: transitionMatch[1],
+          input: transitionMatch[2],
+          to: transitionMatch[3]
+        });
+      }
+      
+      // Extract all states from the specification
+      const stateNames = statesMatch[1].split(',').map(s => {
+        const match = s.match(/'([^']*)'/);
+        return match ? match[1] : null;
+      }).filter(s => s !== null);
+      
+      // Create new graph
+      const newGraph = {
+        nodes: [],
+        edges: []
+      };
+      
+      // Add nodes
+      const stateIdMap = {};
+      stateNames.forEach((state, index) => {
+        const id = index + 1;
+        const label = state;
+        const isAccepting = acceptingStates.includes(state);
+        
+        stateIdMap[state] = id;
+        
+        newGraph.nodes.push({
+          id: id,
+          label: label,
+          title: isAccepting ? 'accepting' : null,
+          borderWidth: isAccepting ? 3 : 1,
+          color: isAccepting ? { border: '#000000' } : undefined
+        });
+      });
+      
+      // Add edges
+      transitions.forEach(transition => {
+        const fromId = stateIdMap[transition.from];
+        const toId = stateIdMap[transition.to];
+        const label = transition.input;
+        
+        // Check if edge already exists
+        const existingEdge = newGraph.edges.find(edge => 
+          edge.from === fromId && edge.to === toId
+        );
+        
+        if (existingEdge) {
+          // Add label to existing edge
+          if (!existingEdge.label.includes(label)) {
+            existingEdge.label = existingEdge.label + ", " + label;
+          }
+        } else {
+          // Create new edge
+          newGraph.edges.push({
+            from: fromId,
+            to: toId,
+            label: label,
+            smooth: { enabled: true, type: 'curvedCW', roundness: 1 }
+          });
+        }
+      });
+      
+      // Update graph data
+      setGraphData(newGraph);
+      setFirstNode(1);
+      setSecondNode(1);
+      
+    } catch (error) {
+      alert(`Error parsing DFA specification: ${error.message}`);
+    }
+  };
 
   const addNewState = (accptingState) => {
     let newGraph = JSON.parse(JSON.stringify(graphData));
@@ -56,8 +169,9 @@ export default function Home() {
     const existingOutTransition = newGraph.edges.find(x => x.from === parseInt(nodeId1) && x.label.includes(label)); 
 
     if (existingEdge) {
-      if (existingEdge.label !== label) {
-        existingEdge.label = '0, 1';
+      if (!existingEdge.label.includes(label)) {
+        // Add new label to existing edge, separated by comma
+        existingEdge.label = existingEdge.label + ", " + label;
       }
     // Check if edge with same value originates from this node already
     } else if (existingOutTransition) {
@@ -82,19 +196,19 @@ export default function Home() {
     setGraphData(defaultGraph);
   };
 
-  // Allow only binary strings
-  const handleStringInput = (e) => e.target.value.match(/(^[01]+$|^$)/g) && setInputString(e.target.value);
+  // Allow only A, C, and 0 characters
+  const handleStringInput = (e) => e.target.value.match(/(^[AC0]+$|^$)/g) && setInputString(e.target.value);
 
   const checkInputString = () => {
-    const currNodeId = 1;
-
-    // Check if input string isn't empty
-    const accepted = inputString.length > 0;
+    let currNodeId = 1;
+    let accepted = inputString.length > 0;
 
     // traverse automata according to input
-    [...inputString].forEach((value, idx) => {
+    for (let idx = 0; idx < inputString.length; idx++) {
+      const value = inputString[idx];
       let nextEdge = graphData.edges.find(x => x.from === currNodeId && x.label.includes(value));
-      if (nextEdge ) {
+      
+      if (nextEdge) {
         currNodeId = nextEdge.to;
         
         // Check if last state is accepting state
@@ -102,12 +216,11 @@ export default function Home() {
           const currNodeObj = graphData.nodes.find(x => x.id === currNodeId);
           accepted = !!currNodeObj.title && currNodeObj.title === "accepting";
         }
-
-        return
       } else {
         accepted = false;
+        break;
       }
-    });
+    }
 
     alert(accepted ? 'String accepted' : 'String not accepted');
   }
@@ -158,27 +271,50 @@ export default function Home() {
             </div>
             <div className="form-group col-sm-3 m-2 d-flex">
               <div className="btn-group align-self-end" role="group" aria-label="Add edge">
-                <input type="button" className="btn btn-primary" onClick={() => addEdge(firstNode, secondNode)} value="Add 0 transition" />
-                <input type="button" className="btn btn-primary" onClick={() => addEdge(firstNode, secondNode, '1')} value="Add 1 transition" />
+                <input type="button" className="btn btn-primary" onClick={() => addEdge(firstNode, secondNode, '0')} value="Add 0 transition" />
+                <input type="button" className="btn btn-primary" onClick={() => addEdge(firstNode, secondNode, 'A')} value="Add A transition" />
+                <input type="button" className="btn btn-primary" onClick={() => addEdge(firstNode, secondNode, 'C')} value="Add C transition" />
               </div>  
             </div>
           </div>
 
           <div className="row">
             <div className="form-group col-sm-6 m-2">
-              <label>Binary input string: </label>
+              <label>Input string (A, C, 0): </label>
               <input type="text" value={inputString}
                 className="form-control"
                 onChange={handleStringInput} 
-                placeholder="Input string..." />
+                placeholder="Enter A, C, 0 characters..." />
             </div>
             <div className="form-group col-sm-4 d-flex m-2">
               <input type="button" onClick={checkInputString} className="btn btn-success align-self-end"  value="Check string" />
             </div>
           </div>
+
+          {/* DFA Specification Import Section */}
+          <div className="row mt-4">
+            <div className="col-12">
+              <h4>Import DFA Specification</h4>
+              <div className="form-group">
+                <textarea
+                  className="form-control"
+                  rows="10"
+                  value={dfaSpecification}
+                  onChange={(e) => setDfaSpecification(e.target.value)}
+                  placeholder="Paste DFA specification here in the format: SPEC_DFA = { ... }"
+                />
+              </div>
+              <button 
+                className="btn btn-primary mt-2"
+                onClick={parseDfaSpecification}
+              >
+                Build DFA from Specification
+              </button>
+            </div>
+          </div>
         </div>
         
-        <div style={{ height: "50vh", width: "80vw", border: "1px solid" }}>
+        <div style={{ height: "50vh", width: "80vw", border: "1px solid", marginTop: "20px" }}>
           <Graph
             key={uuidv4()}
             graph={graphData}
