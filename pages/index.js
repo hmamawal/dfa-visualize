@@ -341,6 +341,11 @@ export default function Home() {
     setGraphVersion(v => v + 1); // bump version on structural change
   }
 
+  const resetAnimations = () => {
+    const cleanGraph = resetAnimationColors();
+    setGraphData(JSON.parse(JSON.stringify(cleanGraph))); // Reset node and edge colors
+  };
+
   return (
     <div className={styles.container}>
       <Head>
@@ -355,10 +360,9 @@ export default function Home() {
         <div style={{ width: '80vw' }}>
           <div className="form-group">
             <button className="btn btn-secondary m-2" onClick={resetGraph}>Reset DFA</button>
-
+            <button className="btn btn-secondary m-2" onClick={resetAnimations}>Reset Animations</button>
             <button className="btn btn-secondary m-2" onClick={() => addNewState()}>Add new state</button>
             <button className="btn btn-secondary m-2" onClick={() => addNewState(true)}>Add new accepting state</button>
-
             <button className="btn btn-secondary m-2" onClick={() => makeStartStateAccepting()}>Make start state accepting</button>
           </div>
 
