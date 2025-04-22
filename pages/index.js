@@ -37,6 +37,9 @@ export default function Home() {
   const [secondNode, setSecondNode] = useState(1);
   const [inputString, setInputString] = useState('');
   const [dfaSpecification, setDfaSpecification] = useState('');
+  const [animationEnabled, setAnimationEnabled] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animationStep, setAnimationStep] = useState(0);
 
   // Parse DFA specification and build the graph
   const parseDfaSpecification = () => {
@@ -199,30 +202,117 @@ export default function Home() {
   // Allow only A, C, and 0 characters
   const handleStringInput = (e) => e.target.value.match(/(^[AC0]+$|^$)/g) && setInputString(e.target.value);
 
-  const checkInputString = () => {
+  // Helper function to reset animation colors
+  const resetAnimationColors = () => {
+    let newGraph = JSON.parse(JSON.stringify(graphData));
+    
+    // Reset all nodes to default color
+    newGraph.nodes.forEach(node => {
+      if (node.color && node.color.background) {
+        delete node.color.background;
+      }
+    });
+    
+    // Reset all edges to default color
+    newGraph.edges.forEach(edge => {
+      if (edge.color) {
+        delete edge.color;
+      }
+    });
+    
+    return newGraph;
+  };
+
+  // Animated check input string function
+  const animateCheckInputString = async () => {
+    setIsAnimating(true);
+    setAnimationStep(0);
+    
     let currNodeId = 1;
     let accepted = inputString.length > 0;
-
-    // traverse automata according to input
+    let newGraph = resetAnimationColors();
+    
+    // Highlight the starting node
+    const startNode = newGraph.nodes.find(node => node.id === currNodeId);
+    if (startNode) {
+      startNode.color = { background: '#90CAF9' };
+      setGraphData(newGraph);
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 1000)); // Initial delay
+    
+    // Traverse automata according to input with animation
     for (let idx = 0; idx < inputString.length; idx++) {
       const value = inputString[idx];
-      let nextEdge = graphData.edges.find(x => x.from === currNodeId && x.label.includes(value));
+      let nextEdge = newGraph.edges.find(x => x.from === currNodeId && x.label.includes(value));
       
       if (nextEdge) {
-        currNodeId = nextEdge.to;
+        // Highlight the edge
+        nextEdge.color = { color: '#1E88E5', highlight: '#1E88E5' };
+        setGraphData(JSON.parse(JSON.stringify(newGraph)));
+        setAnimationStep(idx + 1);
         
-        // Check if last state is accepting state
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Move to next node and highlight it
+        currNodeId = nextEdge.to;
+        const currNode = newGraph.nodes.find(x => x.id === currNodeId);
+        currNode.color = { background: '#90CAF9' };
+        setGraphData(JSON.parse(JSON.stringify(newGraph)));
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check if this is the last step
         if (idx === inputString.length - 1) {
-          const currNodeObj = graphData.nodes.find(x => x.id === currNodeId);
+          const currNodeObj = newGraph.nodes.find(x => x.id === currNodeId);
           accepted = !!currNodeObj.title && currNodeObj.title === "accepting";
+          
+          // Highlight final state in green if accepted, red if rejected
+          currNodeObj.color = { background: accepted ? '#A5D6A7' : '#EF9A9A' };
+          setGraphData(JSON.parse(JSON.stringify(newGraph)));
+          
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       } else {
+        // If no transition, end animation and mark as rejected
         accepted = false;
+        alert('No transition found for ' + value + ' from state ' + currNodeId);
         break;
       }
     }
-
+    
     alert(accepted ? 'String accepted' : 'String not accepted');
+    setIsAnimating(false);
+  };
+
+  const checkInputString = () => {
+    if (animationEnabled) {
+      animateCheckInputString();
+    } else {
+      let currNodeId = 1;
+      let accepted = inputString.length > 0;
+
+      // traverse automata according to input
+      for (let idx = 0; idx < inputString.length; idx++) {
+        const value = inputString[idx];
+        let nextEdge = graphData.edges.find(x => x.from === currNodeId && x.label.includes(value));
+        
+        if (nextEdge) {
+          currNodeId = nextEdge.to;
+          
+          // Check if last state is accepting state
+          if (idx === inputString.length - 1) {
+            const currNodeObj = graphData.nodes.find(x => x.id === currNodeId);
+            accepted = !!currNodeObj.title && currNodeObj.title === "accepting";
+          }
+        } else {
+          accepted = false;
+          break;
+        }
+      }
+
+      alert(accepted ? 'String accepted' : 'String not accepted');
+    }
   }
 
   const makeStartStateAccepting = () => {
@@ -286,8 +376,29 @@ export default function Home() {
                 onChange={handleStringInput} 
                 placeholder="Enter A, C, 0 characters..." />
             </div>
+            <div className="form-group col-sm-2 m-2">
+              <div className="form-check">
+                <input 
+                  type="checkbox" 
+                  className="form-check-input" 
+                  id="animationCheck" 
+                  checked={animationEnabled}
+                  onChange={(e) => setAnimationEnabled(e.target.checked)}
+                  disabled={isAnimating}
+                />
+                <label className="form-check-label" htmlFor="animationCheck">
+                  Animate String Check
+                </label>
+              </div>
+            </div>
             <div className="form-group col-sm-4 d-flex m-2">
-              <input type="button" onClick={checkInputString} className="btn btn-success align-self-end"  value="Check string" />
+              <input 
+                type="button" 
+                onClick={checkInputString} 
+                className="btn btn-success align-self-end" 
+                value={isAnimating ? `Animating... Step ${animationStep}/${inputString.length}` : "Check string"}
+                disabled={isAnimating} 
+              />
             </div>
           </div>
 
