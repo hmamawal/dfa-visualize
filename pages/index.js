@@ -9,18 +9,29 @@ const options = {
   layout: {
     hierarchical: {
       enabled: false,
-    }
+    },
+    // you can also add a fixed randomSeed to keep the initial layout deterministic
+    // randomSeed: 42,
   },
   edges: {
     color: "#ABABAB"
   },
   nodes: {
-    color: "#BBBBBB"
+    color: "#BBBBBB",
+    // tell vis.js to never move nodes once they’re placed
+    fixed: { x: true, y: true }
   },
   physics: {
-    enabled: false
+    enabled: false   // turn off all physics
   },
-  interaction: { multiselect: false, dragView: false }
+  interaction: {
+    multiselect: false,
+    dragView: false,
+    // optional: prevent dragging nodes by hand
+    dragNodes: false,
+    // optional: prevent zooming/panning if you want truly static
+    // zoomView: false
+  }
 };
 
 // Default graph data
@@ -33,6 +44,7 @@ const defaultGraph = {
 
 export default function Home() {
   const [graphData, setGraphData] = useState(defaultGraph);
+  const [graphVersion, setGraphVersion] = useState(1); // track when we really want to recreate the network
   const [firstNode, setFirstNode] = useState(1);
   const [secondNode, setSecondNode] = useState(1);
   const [inputString, setInputString] = useState('');
@@ -116,28 +128,29 @@ export default function Home() {
         });
       });
       
-      // Add edges
+      // Add edges (with unique id!)
       transitions.forEach(transition => {
         const fromId = stateIdMap[transition.from];
-        const toId = stateIdMap[transition.to];
-        const label = transition.input;
-        
+        const toId   = stateIdMap[transition.to];
+        const label  = transition.input;
+
         // Check if edge already exists
-        const existingEdge = newGraph.edges.find(edge => 
-          edge.from === fromId && edge.to === toId
+        const existingEdge = newGraph.edges.find(edge =>
+          edge.from === fromId && edge.to   === toId
         );
-        
+
         if (existingEdge) {
           // Add label to existing edge
           if (!existingEdge.label.includes(label)) {
             existingEdge.label = existingEdge.label + ", " + label;
           }
         } else {
-          // Create new edge
+          // Create new edge (give it an `id`!)
           newGraph.edges.push({
+            id: uuidv4(),            // ← unique edge id
             from: fromId,
-            to: toId,
-            label: label,
+            to:   toId,
+            label,
             smooth: { enabled: true, type: 'curvedCW', roundness: 1 }
           });
         }
@@ -145,6 +158,7 @@ export default function Home() {
       
       // Update graph data
       setGraphData(newGraph);
+      setGraphVersion(v => v + 1); // bump version on structural change
       setFirstNode(1);
       setSecondNode(1);
       
@@ -162,29 +176,34 @@ export default function Home() {
       : { id: newId, label: `Q${newId}`, title: null }
     );
     setGraphData(newGraph);
+    setGraphVersion(v => v + 1); // bump version on structural change
   }
 
   const addEdge = (nodeId1, nodeId2, label = '0') => {
     let newGraph = JSON.parse(JSON.stringify(graphData));
 
     // Check if edge exists already
-    const existingEdge = newGraph.edges.find(x => x.from === parseInt(nodeId1) && x.to === parseInt(nodeId2));
-    const existingOutTransition = newGraph.edges.find(x => x.from === parseInt(nodeId1) && x.label.includes(label)); 
+    const existingEdge       = newGraph.edges.find(x => x.from === +nodeId1 && x.to === +nodeId2);
+    const existingOutTransition = newGraph.edges.find(x => x.from === +nodeId1 && x.label.includes(label)); 
 
     if (existingEdge) {
       if (!existingEdge.label.includes(label)) {
-        // Add new label to existing edge, separated by comma
         existingEdge.label = existingEdge.label + ", " + label;
       }
-    // Check if edge with same value originates from this node already
     } else if (existingOutTransition) {
       const fromNode = newGraph.nodes.find(x => x.id === nodeId1);
-      alert(`${fromNode.label} has a transition with value ${label} already`)
-    // otherwise add new edge
+      alert(`${fromNode.label} has a transition with value ${label} already`);
     } else {
-      newGraph.edges.push({ from: parseInt(nodeId1), to: parseInt(nodeId2), label: label, smooth: { enabled: true, type: 'curvedCW', roundness: 1 } });
+      newGraph.edges.push({
+        id: uuidv4(),            // ← unique edge id again
+        from: +nodeId1,
+        to:   +nodeId2,
+        label,
+        smooth: { enabled: true, type: 'curvedCW', roundness: 1 }
+      });
     }
     setGraphData(newGraph);
+    setGraphVersion(v => v + 1); // bump version on structural change
   };
 
   const handleState1Change = (event) => {
@@ -197,6 +216,7 @@ export default function Home() {
 
   const resetGraph = () => {
     setGraphData(defaultGraph);
+    setGraphVersion(v => v + 1); // bump version on structural change
   };
 
   // Allow only A, C, and 0 characters
@@ -323,6 +343,7 @@ export default function Home() {
     startNode.title = 'accepting';
 
     setGraphData(newGraph);
+    setGraphVersion(v => v + 1); // bump version on structural change
   }
 
   return (
@@ -427,7 +448,7 @@ export default function Home() {
         
         <div style={{ height: "50vh", width: "80vw", border: "1px solid", marginTop: "20px" }}>
           <Graph
-            key={uuidv4()}
+            key={graphVersion}        // ← only changes on STRUCTURAL edits
             graph={graphData}
             options={options}
           />
