@@ -247,60 +247,70 @@ export default function Home() {
   const animateCheckInputString = async () => {
     setIsAnimating(true);
     setAnimationStep(0);
-    
+
     let currNodeId = 1;
     let accepted = inputString.length > 0;
-    let newGraph = resetAnimationColors();
-    
+
+    const cleanGraph = resetAnimationColors();
+    // Clone before your very first update
+    let displayGraph = JSON.parse(JSON.stringify(cleanGraph));
     // Highlight the starting node
-    const startNode = newGraph.nodes.find(node => node.id === currNodeId);
+    const startNode = displayGraph.nodes.find(n => n.id === currNodeId);
     if (startNode) {
       startNode.color = { background: '#90CAF9' };
-      setGraphData(newGraph);
+      setGraphData(displayGraph);
     }
-    
+
     await new Promise(resolve => setTimeout(resolve, 1000)); // Initial delay
-    
+
     // Traverse automata according to input with animation
     for (let idx = 0; idx < inputString.length; idx++) {
       const value = inputString[idx];
-      let nextEdge = newGraph.edges.find(x => x.from === currNodeId && x.label.includes(value));
-      
+
+      // Use the same “cleanGraph” as your base shape for each step
+      displayGraph = JSON.parse(JSON.stringify(cleanGraph));
+      // Find the correct edge on the original-clean edges
+      const nextEdgeOrig = cleanGraph.edges.find(x => x.from === currNodeId && x.label.includes(value));
+      if (!nextEdgeOrig) {
+        accepted = false;
+        alert(`No transition for ${value} from state ${currNodeId}`);
+        break;
+      }
+
+      // Now find that very same edge in the displayGraph clone
+      const nextEdge = displayGraph.edges.find(x => x.id === nextEdgeOrig.id);
+
       if (nextEdge) {
         // Highlight the edge
         nextEdge.color = { color: '#1E88E5', highlight: '#1E88E5' };
-        setGraphData(JSON.parse(JSON.stringify(newGraph)));
+        setGraphData(displayGraph);
         setAnimationStep(idx + 1);
-        
+
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Move to next node and highlight it
         currNodeId = nextEdge.to;
-        const currNode = newGraph.nodes.find(x => x.id === currNodeId);
+        // Also highlight your node on this fresh clone
+        const currNode = displayGraph.nodes.find(n => n.id === currNodeId);
         currNode.color = { background: '#90CAF9' };
-        setGraphData(JSON.parse(JSON.stringify(newGraph)));
-        
+        setGraphData(displayGraph);
+
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Check if this is the last step
         if (idx === inputString.length - 1) {
-          const currNodeObj = newGraph.nodes.find(x => x.id === currNodeId);
-          accepted = !!currNodeObj.title && currNodeObj.title === "accepting";
-          
-          // Highlight final state in green if accepted, red if rejected
+          const currNodeObj = displayGraph.nodes.find(x => x.id === currNodeId);
+          accepted = !!currNodeObj.title && currNodeObj.title === 'accepting';
+
+          // Final-state color
           currNodeObj.color = { background: accepted ? '#A5D6A7' : '#EF9A9A' };
-          setGraphData(JSON.parse(JSON.stringify(newGraph)));
-          
+          setGraphData(displayGraph);
+
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
-      } else {
-        // If no transition, end animation and mark as rejected
-        accepted = false;
-        alert('No transition found for ' + value + ' from state ' + currNodeId);
-        break;
       }
     }
-    
+
     alert(accepted ? 'String accepted' : 'String not accepted');
     setIsAnimating(false);
   };
