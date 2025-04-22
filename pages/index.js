@@ -42,6 +42,39 @@ const defaultGraph = {
   edges: []
 };
 
+// Default DFA specification
+const defaultDfaSpec = `SPEC_DFA = {
+    'alphabet': {'0', 'A', 'C'},
+    'states': {'q0', 'q1', 'q2', 'q3', 'q4', 'q5'},
+    'initial_state': 'q0',
+    'accepting_states': {'q3'},
+    'transitions': {
+        ('q0', 'C'): 'q0',
+        ('q0', 'A'): 'q1',
+        ('q0', '0'): 'q4',
+
+        ('q1', 'C'): 'q2',
+        ('q1', 'A'): 'q1',
+        ('q1', '0'): 'q4',
+
+        ('q2', 'A'): 'q1',
+        ('q2', '0'): 'q3',
+        ('q2', 'C'): 'q0',
+
+        ('q3', '0'): 'q4',
+        ('q3', 'A'): 'q1',
+        ('q3', 'C'): 'q0',
+
+        ('q4', 'C'): 'q5',
+        ('q4', '0'): 'q4',
+        ('q4', 'A'): 'q1',
+
+        ('q5', 'C'): 'q0',
+        ('q5', 'A'): 'q3',
+        ('q5', '0'): 'q4',
+    }
+}`;
+
 export default function Home() {
   const [graphData, setGraphData] = useState(defaultGraph);
   const [graphVersion, setGraphVersion] = useState(1); // track when we really want to recreate the network
@@ -429,6 +462,14 @@ export default function Home() {
     }
   };
 
+  // Load the default DFA specification
+  const loadDefaultDfa = () => {
+    // Set the specification text in the textarea
+    setDfaSpecification(defaultDfaSpec);
+    // Parse and build the DFA
+    parseDfaSpecification(defaultDfaSpec);
+  };
+
   return (
     <div className={styles.container}>
       <Head>
@@ -447,6 +488,7 @@ export default function Home() {
             <button className="btn btn-secondary m-2" onClick={() => addNewState()}>Add new state</button>
             <button className="btn btn-secondary m-2" onClick={() => addNewState(true)}>Add new accepting state</button>
             <button className="btn btn-secondary m-2" onClick={() => makeStartStateAccepting()}>Make start state accepting</button>
+            <button className="btn btn-primary m-2" onClick={loadDefaultDfa}>Load Default DFA</button>
           </div>
 
           <div className="row">
@@ -518,12 +560,20 @@ export default function Home() {
                   placeholder="Paste DFA specification here in the format: SPEC_DFA = { ... }"
                 />
               </div>
-              <button 
-                className="btn btn-primary mt-2"
-                onClick={() => parseDfaSpecification(dfaSpecification)}
-              >
-                Build DFA from Specification
-              </button>
+              <div className="mt-2">
+                <button 
+                  className="btn btn-primary me-2"
+                  onClick={() => parseDfaSpecification(dfaSpecification)}
+                >
+                  Build DFA from Specification
+                </button>
+                <button 
+                  className="btn btn-secondary"
+                  onClick={loadDefaultDfa}
+                >
+                  Load Default DFA
+                </button>
+              </div>
             </div>
           </div>
         </div>
