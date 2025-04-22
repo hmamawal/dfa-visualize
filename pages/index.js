@@ -251,63 +251,48 @@ export default function Home() {
     let currNodeId = 1;
     let accepted = inputString.length > 0;
 
-    const cleanGraph = resetAnimationColors();
-    // Clone before your very first update
-    let displayGraph = JSON.parse(JSON.stringify(cleanGraph));
+    // Start with one clean snapshot
+    let displayGraph = JSON.parse(JSON.stringify(resetAnimationColors()));
+
     // Highlight the starting node
     const startNode = displayGraph.nodes.find(n => n.id === currNodeId);
     if (startNode) {
       startNode.color = { background: '#90CAF9' };
-      setGraphData(displayGraph);
+      setGraphData(JSON.parse(JSON.stringify(displayGraph)));
     }
+    await new Promise(r => setTimeout(r, 1000));
 
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Initial delay
-
-    // Traverse automata according to input with animation
+    // Traverse automata step-by-step, mutating the same `displayGraph`
     for (let idx = 0; idx < inputString.length; idx++) {
       const value = inputString[idx];
 
-      // Use the same “cleanGraph” as your base shape for each step
-      displayGraph = JSON.parse(JSON.stringify(cleanGraph));
-      // Find the correct edge on the original-clean edges
-      const nextEdgeOrig = cleanGraph.edges.find(x => x.from === currNodeId && x.label.includes(value));
-      if (!nextEdgeOrig) {
+      // Find the edge in our live displayGraph
+      const nextEdge = displayGraph.edges.find(x => x.from === currNodeId && x.label.includes(value));
+      if (!nextEdge) {
         accepted = false;
         alert(`No transition for ${value} from state ${currNodeId}`);
         break;
       }
 
-      // Now find that very same edge in the displayGraph clone
-      const nextEdge = displayGraph.edges.find(x => x.id === nextEdgeOrig.id);
+      // Highlight the edge
+      nextEdge.color = { color: '#1E88E5', highlight: '#1E88E5' };
+      setGraphData(JSON.parse(JSON.stringify(displayGraph)));
+      setAnimationStep(idx + 1);
+      await new Promise(r => setTimeout(r, 1000));
 
-      if (nextEdge) {
-        // Highlight the edge
-        nextEdge.color = { color: '#1E88E5', highlight: '#1E88E5' };
-        setGraphData(displayGraph);
-        setAnimationStep(idx + 1);
+      // Move to next node and highlight it
+      currNodeId = nextEdge.to;
+      const currNode = displayGraph.nodes.find(n => n.id === currNodeId);
+      currNode.color = { background: '#90CAF9' };
+      setGraphData(JSON.parse(JSON.stringify(displayGraph)));
+      await new Promise(r => setTimeout(r, 1000));
 
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Move to next node and highlight it
-        currNodeId = nextEdge.to;
-        // Also highlight your node on this fresh clone
-        const currNode = displayGraph.nodes.find(n => n.id === currNodeId);
-        currNode.color = { background: '#90CAF9' };
-        setGraphData(displayGraph);
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        // Check if this is the last step
-        if (idx === inputString.length - 1) {
-          const currNodeObj = displayGraph.nodes.find(x => x.id === currNodeId);
-          accepted = !!currNodeObj.title && currNodeObj.title === 'accepting';
-
-          // Final-state color
-          currNodeObj.color = { background: accepted ? '#A5D6A7' : '#EF9A9A' };
-          setGraphData(displayGraph);
-
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
+      // If last char, do accept/reject color
+      if (idx === inputString.length - 1) {
+        accepted = currNode.title === 'accepting';
+        currNode.color = { background: accepted ? '#A5D6A7' : '#EF9A9A' };
+        setGraphData(JSON.parse(JSON.stringify(displayGraph)));
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
 
