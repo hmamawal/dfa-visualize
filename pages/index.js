@@ -52,31 +52,50 @@ export default function Home() {
   const [animationEnabled, setAnimationEnabled] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [animationStep, setAnimationStep] = useState(0);
-
+  // Store a clean copy of the graph data before animations
+  const [cleanGraphData, setCleanGraphData] = useState(defaultGraph);
+  // Store original DFA specification for rebuilding
+  const [originalDfaSpec, setOriginalDfaSpec] = useState('');
+  
   // Parse DFA specification and build the graph
-  const parseDfaSpecification = () => {
+  const parseDfaSpecification = (specText, storeAsOriginal = true) => {
     try {
-      // Extract the DFA specification from the text
-      const specMatch = dfaSpecification.match(/SPEC_DFA\s*=\s*\{([\s\S]*)\}/);
-      if (!specMatch) throw new Error("Invalid DFA specification format");
+      // Use passed specText or fallback to dfaSpecification state
+      const textToUse = specText || dfaSpecification;
       
-      const specText = specMatch[0];
+      // Ensure we have a string to work with
+      if (!textToUse || typeof textToUse !== 'string') {
+        throw new Error("DFA specification must be a string");
+      }
+
+      // Extract the DFA specification from the text if it's not already extracted
+      let specToUse = textToUse;
+      if (!textToUse.startsWith('SPEC_DFA')) {
+        const specMatch = textToUse.match(/SPEC_DFA\s*=\s*\{([\s\S]*)\}/);
+        if (!specMatch) throw new Error("Invalid DFA specification format");
+        specToUse = specMatch[0];
+      }
+      
+      // If this is the first build (not a reset), store the original spec
+      if (storeAsOriginal) {
+        setOriginalDfaSpec(specToUse);
+      }
       
       // Parse alphabet
-      const alphabetMatch = specText.match(/'alphabet':\s*\{([^}]*)\}/);
+      const alphabetMatch = specToUse.match(/'alphabet':\s*\{([^}]*)\}/);
       if (!alphabetMatch) throw new Error("Could not find alphabet in specification");
       
       // Parse states
-      const statesMatch = specText.match(/'states':\s*\{([^}]*)\}/);
+      const statesMatch = specToUse.match(/'states':\s*\{([^}]*)\}/);
       if (!statesMatch) throw new Error("Could not find states in specification");
       
       // Parse initial state
-      const initialStateMatch = specText.match(/'initial_state':\s*'([^']*)'/);
+      const initialStateMatch = specToUse.match(/'initial_state':\s*'([^']*)'/);
       if (!initialStateMatch) throw new Error("Could not find initial state in specification");
       const initialState = initialStateMatch[1];
       
       // Parse accepting states
-      const acceptingStatesMatch = specText.match(/'accepting_states':\s*\{([^}]*)\}/);
+      const acceptingStatesMatch = specToUse.match(/'accepting_states':\s*\{([^}]*)\}/);
       if (!acceptingStatesMatch) throw new Error("Could not find accepting states in specification");
       
       const acceptingStates = acceptingStatesMatch[1].split(',').map(s => {
@@ -85,7 +104,7 @@ export default function Home() {
       }).filter(s => s !== null);
       
       // Parse transitions
-      const transitionsText = specText.substring(specText.indexOf("'transitions'"));
+      const transitionsText = specToUse.substring(specToUse.indexOf("'transitions'"));
       const transitionRegex = /\('([^']*)',\s*'([^']*)'\):\s*'([^']*)'/g;
       
       const transitions = [];
@@ -156,9 +175,10 @@ export default function Home() {
         }
       });
       
-      // Update graph data
+      // Update graph data and keep a clean copy
       setGraphData(newGraph);
-      setGraphVersion(v => v + 1); // bump version on structural change
+      setCleanGraphData(JSON.parse(JSON.stringify(newGraph))); 
+      setGraphVersion(v => v + 1);
       setFirstNode(1);
       setSecondNode(1);
       
@@ -166,7 +186,7 @@ export default function Home() {
       alert(`Error parsing DFA specification: ${error.message}`);
     }
   };
-
+  
   const addNewState = (accptingState) => {
     let newGraph = JSON.parse(JSON.stringify(graphData));
     const ids = newGraph.nodes.map(x => x.id);
@@ -176,6 +196,8 @@ export default function Home() {
       : { id: newId, label: `Q${newId}`, title: null }
     );
     setGraphData(newGraph);
+    setCleanGraphData(JSON.parse(JSON.stringify(newGraph))); // Store clean copy
+    updateDfaSpecFromGraph(newGraph); // Update the spec
     setGraphVersion(v => v + 1); // bump version on structural change
   }
 
@@ -203,6 +225,8 @@ export default function Home() {
       });
     }
     setGraphData(newGraph);
+    setCleanGraphData(JSON.parse(JSON.stringify(newGraph))); // Store clean copy
+    updateDfaSpecFromGraph(newGraph); // Update the spec
     setGraphVersion(v => v + 1); // bump version on structural change
   };
 
@@ -216,6 +240,8 @@ export default function Home() {
 
   const resetGraph = () => {
     setGraphData(defaultGraph);
+    setCleanGraphData(defaultGraph); // Reset clean copy too
+    setOriginalDfaSpec(''); // Clear the original spec
     setGraphVersion(v => v + 1); // bump version on structural change
   };
 
@@ -224,20 +250,30 @@ export default function Home() {
 
   // Helper function to reset animation colors
   const resetAnimationColors = () => {
-    let newGraph = JSON.parse(JSON.stringify(graphData));
+    // Create a completely new graph object instead of mutating the existing one
+    const newGraph = {
+      nodes: [],
+      edges: []
+    };
     
-    // Reset all nodes to default color
-    newGraph.nodes.forEach(node => {
-      if (node.color && node.color.background) {
-        delete node.color.background;
-      }
+    // Recreate each node with proper styling based on accepting status
+    graphData.nodes.forEach(node => {
+      const newNode = {
+        ...node, // Copy all basic properties
+        color: node.title === 'accepting' 
+          ? { border: '#000000' } // Only border for accepting states
+          : undefined, // Default color for non-accepting states
+        borderWidth: node.title === 'accepting' ? 3 : 1
+      };
+      newGraph.nodes.push(newNode);
     });
     
-    // Reset all edges to default color
-    newGraph.edges.forEach(edge => {
-      if (edge.color) {
-        delete edge.color;
-      }
+    // Recreate edges with no color styling
+    graphData.edges.forEach(edge => {
+      newGraph.edges.push({
+        ...edge, // Copy all properties
+        color: undefined // Reset color
+      });
     });
     
     return newGraph;
@@ -338,12 +374,59 @@ export default function Home() {
     startNode.title = 'accepting';
 
     setGraphData(newGraph);
+    setCleanGraphData(JSON.parse(JSON.stringify(newGraph))); // Store clean copy
+    updateDfaSpecFromGraph(newGraph); // Update the spec
     setGraphVersion(v => v + 1); // bump version on structural change
   }
 
+  // Reset animations by rebuilding the DFA from the original specification
   const resetAnimations = () => {
-    const cleanGraph = resetAnimationColors();
-    setGraphData(JSON.parse(JSON.stringify(cleanGraph))); // Reset node and edge colors
+    if (originalDfaSpec && originalDfaSpec.length > 0) {
+      // Use the stored original DFA spec to rebuild the graph
+      parseDfaSpecification(originalDfaSpec, false);
+    } else {
+      // If no original spec exists, just use the clean graph data
+      setGraphData(JSON.parse(JSON.stringify(cleanGraphData)));
+    }
+  };
+
+  // On manual edits to the DFA, also capture as specification
+  const updateDfaSpecFromGraph = (newGraph) => {
+    // Only do this for structural changes, not animations
+    try {
+      // Build a spec representation from the current graph
+      const states = newGraph.nodes.map(n => `'${n.label}'`).join(', ');
+      const acceptingStates = newGraph.nodes
+        .filter(n => n.title === 'accepting')
+        .map(n => `'${n.label}'`)
+        .join(', ');
+        
+      const transitionsArray = [];
+      newGraph.edges.forEach(e => {
+        const fromNode = newGraph.nodes.find(n => n.id === e.from);
+        const toNode = newGraph.nodes.find(n => n.id === e.to);
+        
+        // Handle comma-separated transition labels
+        const labels = e.label.split(', ');
+        labels.forEach(label => {
+          transitionsArray.push(`('${fromNode.label}', '${label}'): '${toNode.label}'`);
+        });
+      });
+      
+      const spec = `SPEC_DFA = {
+        'alphabet': {'A', 'C', '0'},
+        'states': {${states}},
+        'initial_state': 'Start',
+        'accepting_states': {${acceptingStates}},
+        'transitions': {
+          ${transitionsArray.join(',\n          ')}
+        }
+      }`;
+      
+      setOriginalDfaSpec(spec);
+    } catch (err) {
+      console.error("Could not update DFA specification:", err);
+    }
   };
 
   return (
@@ -437,7 +520,7 @@ export default function Home() {
               </div>
               <button 
                 className="btn btn-primary mt-2"
-                onClick={parseDfaSpecification}
+                onClick={() => parseDfaSpecification(dfaSpecification)}
               >
                 Build DFA from Specification
               </button>
